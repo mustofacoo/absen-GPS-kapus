@@ -44,7 +44,7 @@
   <select v-model="loginForm.userId"
     style="width:100%;padding:14px 16px;border:1.5px solid #E5E7EB;border-radius:12px;font-size:15px;color:#111827;outline:none;background:white;transition:border 0.2s;"
     @focus="e=>e.target.style.borderColor='#dd861c'" @blur="e=>e.target.style.borderColor='#E5E7EB'">
-    <option value="" disabled>-- Pilih nama Anda --</option>
+    <option value="" disabled>Para Mujahid</option>
     <option v-for="u in db.users" :key="u.id" :value="u.id">{{ u.name }}</option>
   </select>
 </div>
