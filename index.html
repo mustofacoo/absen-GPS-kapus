@@ -91,7 +91,7 @@
         </div>
         <div>
           <p style="font-size:14px;font-weight:700;color:#111827;line-height:1.2;">{{ currentUser.name }}</p>
-          <p style="font-size:11px;color:#6B7280;text-transform:capitalize;">{{ currentUser.role === 'admin' ? 'Administrator' : 'Karyawan' }}</p>
+          <p style="font-size:11px;color:#6B7280;text-transform:capitalize;">{{ currentUser.role === 'admin' ? 'Administrator' : 'Mujahid' }}</p>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -259,10 +259,10 @@
 
       </template>
 
-      <!-- ===== KARYAWAN VIEW ===== -->
+      <!-- ===== Mujahid VIEW ===== -->
       <template v-else>
 
-        <!-- Karyawan Tab Nav -->
+        <!-- Mujahid Tab Nav -->
         <div style="background:white;padding:0 16px;display:flex;gap:4px;border-bottom:1px solid #E5E7EB;">
           <button v-for="tab in userTabs" :key="tab.id" @click="userTab=tab.id"
             :style="`flex:1;padding:12px 4px;font-size:12px;font-weight:600;border:none;background:none;border-bottom:2px solid ${userTab===tab.id?'#dd861c':'transparent'};color:${userTab===tab.id?'#dd861c':'#6B7280'};transition:all 0.2s;`">
@@ -518,11 +518,11 @@
   style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:flex-end;justify-content:center;">
   <div style="background:white;border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:430px;">
     <h3 style="font-size:18px;font-weight:700;color:#111827;margin-bottom:20px;">
-      {{ editingUser ? 'Edit Karyawan' : 'Tambah Karyawan' }}
+      {{ editingUser ? 'Edit Mujahid' : 'Tambah Mujahid' }}
     </h3>
     <div style="margin-bottom:14px;">
       <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Nama</label>
-      <input v-model="userForm.name" type="text" placeholder="Nama karyawan"
+      <input v-model="userForm.name" type="text" placeholder="Nama Mujahid"
         style="width:100%;padding:13px 14px;border:1.5px solid #E5E7EB;border-radius:12px;font-size:15px;color:#111827;outline:none;">
     </div>
     <div style="margin-bottom:20px;">
