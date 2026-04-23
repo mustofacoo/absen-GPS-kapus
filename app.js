@@ -147,7 +147,7 @@ createApp({
 
     const adminTabs = [
       { id: 'dashboard', label: 'Dashboard' },
-      { id: 'users', label: 'Karyawan' },
+      { id: 'users', label: 'Mujahid' },
       { id: 'report', label: 'Rekap' },
     ];
     const userTabs = [
@@ -523,19 +523,19 @@ createApp({
           if (user) { user.name = userForm.name.trim(); user.password = userForm.password; }
         }
         showUserModal.value = false;
-        showToast(editingUser.value ? 'Data karyawan diperbarui' : 'Karyawan berhasil ditambahkan');
+        showToast(editingUser.value ? 'Data Mujahid diperbarui' : 'Mujahid berhasil ditambahkan');
       } catch (e) {
         formError.value = 'Gagal menyimpan: ' + e.message;
       }
     }
 
     async function deleteUser(uid) {
-      if (!confirm('Hapus karyawan ini?')) return;
+      if (!confirm('Hapus Mujahid ini?')) return;
       try {
         await sbDeleteUser(uid);
         const idx = db.users.findIndex(u => u.id === uid);
         if (idx > -1) db.users.splice(idx, 1);
-        showToast('Karyawan dihapus');
+        showToast('Mujahid dihapus');
       } catch (e) {
         showToast('Gagal menghapus: ' + e.message, 'error');
       }
