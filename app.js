@@ -161,17 +161,22 @@ createApp({
       { value: 'tugas_luar', label: 'Tugas Luar', color: '#1249c9', desc: 'Dinas atau tugas lapangan' },
     ];
 
-    const months = computed(() => {
-      const now = new Date();
-      const result = [];
-      for (let i = 5; i >= -1; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        const label = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-        result.push({ value: val, label });
-      }
-      return result;
-    });
+const months = computed(() => {
+  const now = new Date();
+  const result = [];
+  for (let i = 5; i >= -1; i--) {
+    const d    = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 26);
+    const val  = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const namaBulan = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    const prevLabel = prev.toLocaleDateString('id-ID', { day:'numeric', month:'short' });
+    const endLabel  = new Date(d.getFullYear(), d.getMonth(), 25)
+                        .toLocaleDateString('id-ID', { day:'numeric', month:'short' });
+    const label = `${namaBulan} (${prevLabel} – ${endLabel})`;
+    result.push({ value: val, label });
+  }
+  return result;
+});
 
     const todayAttendanceList = computed(() =>
       db.attendance.filter(a => a.date === today.value)
@@ -215,56 +220,68 @@ createApp({
       return null;
     });
 
+    // SESUDAH
     const todayStats = computed(() => {
       const emps = employeeUsers.value;
       const todayAtts = todayAttendanceList.value;
-      const hadir = todayAtts.filter(a => a.status === 'hadir').length;
-      const izin  = todayAtts.filter(a => a.status === 'izin').length;
-      const sakit = todayAtts.filter(a => a.status === 'sakit').length;
-      const alpha = isWeekend(today.value) ? 0 : Math.max(0, emps.length - todayAtts.length);
+      const hadir      = todayAtts.filter(a => a.status === 'hadir').length;
+      const izin       = todayAtts.filter(a => a.status === 'izin').length;
+      const sakit      = todayAtts.filter(a => a.status === 'sakit').length;
+      const dinasLuar  = todayAtts.filter(a => a.status === 'tugas_luar').length;
+      const alpha      = isWeekend(today.value) ? 0 : Math.max(0, emps.length - todayAtts.length);
       return [
-        { label: 'Hadir',     value: hadir,           color: '#059669' },
-        { label: 'Izin/Sakit',value: izin + sakit,    color: '#D97706' },
-        { label: 'Alpha',     value: alpha,            color: '#DC2626' },
-        { label: 'Total',     value: emps.length,      color: '#1A56DB' },
+        { label: 'Hadir',      value: hadir,         color: '#059669' },
+        { label: 'Izin/Sakit', value: izin + sakit,  color: '#D97706' },
+        { label: 'Alpha',      value: alpha,          color: '#DC2626' },
+        { label: 'Dinas Luar', value: dinasLuar,      color: '#1A56DB' },
       ];
     });
 
-    const filteredReport = computed(() => {
-      if (!reportFilter.month) return [];
-      const [fy, fm] = reportFilter.month.split('-');
-      const days = getDaysInMonth(parseInt(fy), parseInt(fm));
-      const result = [];
-      const users = reportFilter.userId
-        ? db.users.filter(u => u.id === reportFilter.userId)
-        : employeeUsers.value;
-      const attendanceLookup = {};
-      db.attendance.forEach(rec => { attendanceLookup[`${rec.user_id}_${rec.date}`] = rec; });
-      for (const user of users) {
-        for (let d = 1; d <= days; d++) {
-          const dateStr = `${fy}-${fm}-${String(d).padStart(2,'0')}`;
-          if (new Date(dateStr) > new Date()) continue;
-          if (isWeekend(dateStr)) continue;
-          const att = attendanceLookup[`${user.id}_${dateStr}`];
-          const status = att ? att.status : 'alpha';
-          const arrivalCat = (att && att.status === 'hadir') ? getArrivalCategory(att.check_in) : null;
-          result.push({
-            key: `${user.id}_${dateStr}`,
-            user_id: user.id,
-            name: user.name,
-            date: dateStr,
-            dateDisplay: new Date(dateStr).toLocaleDateString('id-ID', { day:'numeric', month:'short' }),
-            status,
-            check_in:  att?.check_in  || '',
-            check_out: att?.check_out || '',
-            note:      att?.note      || '',
-            supabase_id: att?.id || null, // id dari Supabase, dipakai saat update
-            arrivalCat,
-          });
-        }
+const filteredReport = computed(() => {
+  if (!reportFilter.month) return [];
+
+  // Hitung rentang: 26 bulan sebelumnya s/d 25 bulan ini
+  const [fy, fm] = reportFilter.month.split('-').map(Number);
+  const startDate = new Date(fy, fm - 2, 26); // tgl 26 bulan sebelumnya
+  const endDate   = new Date(fy, fm - 1, 25); // tgl 25 bulan ini
+  const today     = new Date();
+  const cap       = endDate < today ? endDate : today; // jangan lewati hari ini
+
+  const result = [];
+  const users = reportFilter.userId
+    ? db.users.filter(u => u.id === reportFilter.userId)
+    : employeeUsers.value;
+
+  const attendanceLookup = {};
+  db.attendance.forEach(rec => { attendanceLookup[`${rec.user_id}_${rec.date}`] = rec; });
+
+  for (const user of users) {
+    const cur = new Date(startDate);
+    while (cur <= cap) {
+      const dateStr = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
+      if (!isWeekend(dateStr)) {
+        const att = attendanceLookup[`${user.id}_${dateStr}`];
+        const status = att ? att.status : 'alpha';
+        const arrivalCat = (att && att.status === 'hadir') ? getArrivalCategory(att.check_in) : null;
+        result.push({
+          key:        `${user.id}_${dateStr}`,
+          user_id:    user.id,
+          name:       user.name,
+          date:       dateStr,
+          dateDisplay: new Date(dateStr).toLocaleDateString('id-ID', { day:'numeric', month:'short' }),
+          status,
+          check_in:   att?.check_in  || '',
+          check_out:  att?.check_out || '',
+          note:       att?.note      || '',
+          supabase_id: att?.id || null,
+          arrivalCat,
+        });
       }
-      return result.reverse();
-    });
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  return result.reverse();
+});
 
     const reportSummary = computed(() => {
       const rows = filteredReport.value;
@@ -293,55 +310,65 @@ createApp({
 
     const myHistory = computed(() => {
       if (!currentUser.value) return [];
-      const [hy, hm] = historyMonth.value.split('-');
-      const days = getDaysInMonth(parseInt(hy), parseInt(hm));
-      const result = [];
-      for (let d = 1; d <= days; d++) {
-        const dateStr = `${hy}-${hm}-${String(d).padStart(2,'0')}`;
-        if (new Date(dateStr) > new Date()) continue;
+      const [hy, hm] = historyMonth.value.split('-').map(Number);
+      const startDate = new Date(hy, hm - 2, 26); // tgl 26 bulan sebelumnya
+      const endDate   = new Date(hy, hm - 1, 25); // tgl 25 bulan ini
+      const today     = new Date();
+      const cap       = endDate < today ? endDate : today;
+      const result    = [];
+      const cur = new Date(startDate);
+      while (cur <= cap) {
+        const dateStr = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
         if (isWeekend(dateStr)) {
           result.push({ date: dateStr, status: 'libur', check_in: '', check_out: '', note: '' });
-          continue;
+        } else {
+          const att = db.attendance.find(a => a.user_id === currentUser.value.id && a.date === dateStr);
+          result.push(att || { date: dateStr, status: 'alpha', check_in: '', check_out: '', note: '' });
         }
-        const att = db.attendance.find(a => a.user_id === currentUser.value.id && a.date === dateStr);
-        if (att) result.push(att);
-        else result.push({ date: dateStr, status: 'alpha', check_in: '', check_out: '', note: '' });
+        cur.setDate(cur.getDate() + 1);
       }
       return result.reverse();
     });
 
     const myMonthStats = computed(() => {
       if (!currentUser.value) return [];
-      const [y, m] = historyMonth.value.split('-');
-      const days = getDaysInMonth(parseInt(y), parseInt(m));
-      let hadir=0,izin=0,sakit=0,alpha=0,tepat=0,terlambatR=0,terlambatS=0,terlambatB=0;
-      for (let d = 1; d <= days; d++) {
-        const dateStr = `${y}-${m}-${String(d).padStart(2,'0')}`;
-        if (new Date(dateStr) > new Date()) continue;
-        if (isWeekend(dateStr)) continue;
-        const att = db.attendance.find(a => a.user_id === currentUser.value.id && a.date === dateStr);
-        const s = att ? att.status : 'alpha';
-        if (s==='hadir') {
-          hadir++;
-          const cat = getArrivalCategory(att.check_in);
-          if (cat?.key === 'tepat_waktu')      tepat++;
-          else if (cat?.key === 'terlambat_ringan') terlambatR++;
-          else if (cat?.key === 'terlambat_sedang') terlambatS++;
-          else if (cat?.key === 'terlambat_berat')  terlambatB++;
+      const [hy, hm] = historyMonth.value.split('-').map(Number);
+      const startDate = new Date(hy, hm - 2, 26);
+      const endDate   = new Date(hy, hm - 1, 25);
+      const today     = new Date();
+      const cap       = endDate < today ? endDate : today;
+      let hadir=0,izin=0,sakit=0,alpha=0,tugas=0,tepat=0,terlambatR=0,terlambatS=0,terlambatB=0;
+      const cur = new Date(startDate);
+      while (cur <= cap) {
+        const dateStr = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
+        if (!isWeekend(dateStr)) {
+          const att = db.attendance.find(a => a.user_id === currentUser.value.id && a.date === dateStr);
+          const s = att ? att.status : 'alpha';
+          if (s==='hadir') {
+            hadir++;
+            const cat = getArrivalCategory(att.check_in);
+            if (cat?.key === 'tepat_waktu')           tepat++;
+            else if (cat?.key === 'terlambat_ringan') terlambatR++;
+            else if (cat?.key === 'terlambat_sedang') terlambatS++;
+            else if (cat?.key === 'terlambat_berat')  terlambatB++;
+          }
+          else if (s==='izin')       izin++;
+          else if (s==='sakit')      sakit++;
+          else if (s==='tugas_luar') tugas++;
+          else if (s==='alpha')      alpha++;
         }
-        else if (s==='izin')  izin++;
-        else if (s==='sakit') sakit++;
-        else if (s==='alpha') alpha++;
+        cur.setDate(cur.getDate() + 1);
       }
       return [
-        { label: 'Hadir',             value: hadir,      color: '#059669' },
-        { label: 'Izin',              value: izin,        color: '#D97706' },
-        { label: 'Sakit',             value: sakit,       color: '#EF4444' },
-        { label: 'Alpha',             value: alpha,       color: '#DC2626' },
-        { label: 'Tepat Waktu',       value: tepat,       color: '#059669' },
-        { label: 'Terlambat Ringan',  value: terlambatR,  color: '#D97706' },
-        { label: 'Terlambat Sedang',  value: terlambatS,  color: '#EA580C' },
-        { label: 'Terlambat Berat',   value: terlambatB,  color: '#DC2626' },
+        { label: 'Hadir',            value: hadir,      color: '#059669' },
+        { label: 'Izin',             value: izin,        color: '#D97706' },
+        { label: 'Sakit',            value: sakit,       color: '#EF4444' },
+        { label: 'Tugas Luar',       value: tugas,       color: '#7C3AED' },
+        { label: 'Alpha',            value: alpha,       color: '#DC2626' },
+        { label: 'Tepat Waktu',      value: tepat,       color: '#059669' },
+        { label: 'Terlambat Ringan', value: terlambatR,  color: '#D97706' },
+        { label: 'Terlambat Sedang', value: terlambatS,  color: '#EA580C' },
+        { label: 'Terlambat Berat',  value: terlambatB,  color: '#DC2626' },
       ];
     });
 
@@ -600,12 +627,26 @@ createApp({
 
     // Ketika bulan rekap berubah, muat data bulan itu dari Supabase
     // (dipanggil dari watcher di bawah)
-    async function onReportMonthChange(newMonth) {
-      await loadAttendanceForMonth(newMonth);
-    }
-    async function onHistoryMonthChange(newMonth) {
-      await loadAttendanceForMonth(newMonth);
-    }
+      async function onReportMonthChange(newMonth) {
+        const [fy, fm] = newMonth.split('-').map(Number);
+        // Perlu data bulan sebelumnya juga (untuk tgl 26–akhir bulan lalu)
+        const prevDate  = new Date(fy, fm - 2, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+        await Promise.all([
+          loadAttendanceForMonth(newMonth),
+          loadAttendanceForMonth(prevMonth),
+        ]);
+      }
+      async function onHistoryMonthChange(newMonth) {
+        const [fy, fm] = newMonth.split('-').map(Number);
+        const prevDate  = new Date(fy, fm - 2, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+        await Promise.all([
+          loadAttendanceForMonth(newMonth),
+          loadAttendanceForMonth(prevMonth),
+        ]);
+      }
+
 
     // Vue watch — pantau perubahan filter bulan
     const { watch } = Vue;
