@@ -78,8 +78,8 @@ createApp({
       isLoading.value = true;
       try {
         // Ambil semua user
-        db.users = await sbGetUsers();
-
+        const users = await sbGetUsers();
+      db.users = users.slice().sort((a, b) => a.name.localeCompare(b.name, 'id'));
         // Ambil absensi bulan ini + bulan lalu (untuk hasUnfinishedCheckout)
         const now = new Date();
         const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -292,19 +292,19 @@ const filteredReport = computed(() => {
       const alpha     = rows.filter(r => r.status === 'alpha').length;
       const hadirRows = rows.filter(r => r.status === 'hadir');
       const tepat      = hadirRows.filter(r => r.arrivalCat?.key === 'tepat_waktu').length;
-      const terlambatR = hadirRows.filter(r => r.arrivalCat?.key === 'terlambat_ringan').length;
+
       const terlambatS = hadirRows.filter(r => r.arrivalCat?.key === 'terlambat_sedang').length;
       const terlambatB = hadirRows.filter(r => r.arrivalCat?.key === 'terlambat_berat').length;
       return [
-        { label: 'Hadir',  value: hadir,  color: '#059669' },
+      
+        { label: 'Tepat Waktu',                      value: tepat,       color: '#059669' },
+        { label: 'Terlambat Sedang (08.01-08.30)',    value: terlambatS,  color: '#EA580C' },
+        { label: 'Terlambat Berat (08.30+)',          value: terlambatB,  color: '#DC2626' },
         { label: 'Izin',   value: izin,   color: '#D97706' },
         { label: 'Sakit',  value: sakit,  color: '#EF4444' },
         { label: 'Tugas',  value: tugas,  color: '#7C3AED' },
         { label: 'Alpha',  value: alpha,  color: '#DC2626' },
-        { label: 'Tepat Waktu',                      value: tepat,       color: '#059669' },
-        { label: 'Terlambat Ringan (08:00-08.15)',    value: terlambatR,  color: '#D97706' },
-        { label: 'Terlambat Sedang (08.15-09.00)',    value: terlambatS,  color: '#EA580C' },
-        { label: 'Terlambat Berat (09.00+)',          value: terlambatB,  color: '#DC2626' },
+
       ];
     });
 
@@ -337,7 +337,7 @@ const filteredReport = computed(() => {
       const endDate   = new Date(hy, hm - 1, 25);
       const today     = new Date();
       const cap       = endDate < today ? endDate : today;
-      let hadir=0,izin=0,sakit=0,alpha=0,tugas=0,tepat=0,terlambatR=0,terlambatS=0,terlambatB=0;
+      let hadir=0,izin=0,sakit=0,alpha=0,tugas=0,tepat=0,terlambatS=0,terlambatB=0;
       const cur = new Date(startDate);
       while (cur <= cap) {
         const dateStr = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
@@ -348,7 +348,7 @@ const filteredReport = computed(() => {
             hadir++;
             const cat = getArrivalCategory(att.check_in);
             if (cat?.key === 'tepat_waktu')           tepat++;
-            else if (cat?.key === 'terlambat_ringan') terlambatR++;
+           
             else if (cat?.key === 'terlambat_sedang') terlambatS++;
             else if (cat?.key === 'terlambat_berat')  terlambatB++;
           }
@@ -360,15 +360,14 @@ const filteredReport = computed(() => {
         cur.setDate(cur.getDate() + 1);
       }
       return [
-        { label: 'Hadir',            value: hadir,      color: '#059669' },
+        { label: 'Tepat Waktu',      value: tepat,       color: '#059669' },
+        { label: 'Terlambat Sedang', value: terlambatS,  color: '#EA580C' },
+        { label: 'Terlambat Berat',  value: terlambatB,  color: '#DC2626' },
         { label: 'Izin',             value: izin,        color: '#D97706' },
         { label: 'Sakit',            value: sakit,       color: '#EF4444' },
         { label: 'Tugas Luar',       value: tugas,       color: '#7C3AED' },
         { label: 'Alpha',            value: alpha,       color: '#DC2626' },
-        { label: 'Tepat Waktu',      value: tepat,       color: '#059669' },
-        { label: 'Terlambat Ringan', value: terlambatR,  color: '#D97706' },
-        { label: 'Terlambat Sedang', value: terlambatS,  color: '#EA580C' },
-        { label: 'Terlambat Berat',  value: terlambatB,  color: '#DC2626' },
+
       ];
     });
 
@@ -544,6 +543,7 @@ const filteredReport = computed(() => {
           if (exists) { formError.value = 'Nama sudah terdaftar'; return; }
           const newUser = await sbAddUser(userForm.name.trim(), userForm.password);
           db.users.push(newUser);
+          db.users.sort((a, b) => a.name.localeCompare(b.name, 'id'));
         } else {
           await sbUpdateUser(editingUser.value.id, userForm.name.trim(), userForm.password);
           const user = db.users.find(u => u.id === editingUser.value.id);
@@ -606,6 +606,92 @@ const filteredReport = computed(() => {
       }
     }
 
+    // ===== EXPORT CSV REKAP =====
+function exportCSV() {
+  const [fy, fm] = reportFilter.month.split('-').map(Number);
+  const startDate = new Date(fy, fm - 2, 26);
+  const endDate   = new Date(fy, fm - 1, 25);
+  const today2    = new Date();
+  const cap       = endDate < today2 ? endDate : today2;
+
+  const users = reportFilter.userId
+    ? db.users.filter(u => u.id === reportFilter.userId)
+    : employeeUsers.value;
+
+  const attendanceLookup = {};
+  db.attendance.forEach(rec => { attendanceLookup[`${rec.user_id}_${rec.date}`] = rec; });
+
+  const rows = [];
+  // Header
+  rows.push([
+    'Nama',
+    'Total Hadir',
+    'Tepat Waktu',
+  
+    'Terlambat Sedang',
+    'Terlambat Berat',
+    'Sakit',
+    'Izin',
+    'Dinas Luar',
+    'Alpha'
+  ]);
+
+  for (const user of users) {
+    let hadir=0, tepat=0, terlambatR=0, terlambatS=0, terlambatB=0;
+    let sakit=0, izin=0, tugas=0, alpha=0;
+
+    const cur = new Date(startDate);
+    while (cur <= cap) {
+      const dateStr = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
+      if (!isWeekend(dateStr)) {
+        const att = attendanceLookup[`${user.id}_${dateStr}`];
+        const s = att ? att.status : 'alpha';
+        if (s === 'hadir') {
+          hadir++;
+          const cat = getArrivalCategory(att.check_in);
+          if      (cat?.key === 'tepat_waktu')       tepat++;
+          else if (cat?.key === 'terlambat_ringan')  terlambatR++;
+          else if (cat?.key === 'terlambat_sedang')  terlambatS++;
+          else if (cat?.key === 'terlambat_berat')   terlambatB++;
+        }
+        else if (s === 'sakit')      sakit++;
+        else if (s === 'izin')       izin++;
+        else if (s === 'tugas_luar') tugas++;
+        else if (s === 'alpha')      alpha++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    rows.push([
+      user.name,
+      hadir,
+      tepat,
+  
+      terlambatS,
+      terlambatB,
+      sakit,
+      izin,
+      tugas,
+      alpha
+    ]);
+  }
+
+  // Buat konten CSV
+  const csvContent = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+
+  // Nama file: rekap-BULAN-TAHUN.csv
+  const bulan = new Date(fy, fm - 1, 1)
+    .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+    .replace(/ /g, '-');
+  a.href     = url;
+  a.download = `rekap-${bulan}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
     function statusLabel(s) {
       return { hadir:'Hadir', izin:'Izin', sakit:'Sakit', tugas_luar:'Tugas Luar', alpha:'Alpha', libur:'Libur' }[s] || s;
     }
@@ -619,10 +705,10 @@ const filteredReport = computed(() => {
       if (!checkIn) return null;
       const [h, m] = checkIn.split(':').map(Number);
       const t = h * 60 + m;
-      if (t <= 480)  return { key: 'tepat_waktu',      label: 'Tepat Waktu',       color: '#059669', bg: '#D1FAE5' };
-      if (t <= 495)  return { key: 'terlambat_ringan',  label: 'Terlambat Ringan',  color: '#D97706', bg: '#FEF3C7' };
-      if (t <= 540)  return { key: 'terlambat_sedang',  label: 'Terlambat Sedang',  color: '#EA580C', bg: '#FFEDD5' };
-      return           { key: 'terlambat_berat',   label: 'Terlambat Berat',   color: '#DC2626', bg: '#FEE2E2' };
+// SESUDAH
+if (t <= 480)  return { key: 'tepat_waktu',     label: 'Tepat Waktu',     color: '#059669', bg: '#D1FAE5' };
+if (t <= 510)  return { key: 'terlambat_sedang', label: 'Terlambat Sedang', color: '#EA580C', bg: '#FFEDD5' };
+return           { key: 'terlambat_berat',  label: 'Terlambat Berat',  color: '#DC2626', bg: '#FEE2E2' };
     }
 
     // Ketika bulan rekap berubah, muat data bulan itu dari Supabase
@@ -667,7 +753,7 @@ const filteredReport = computed(() => {
       login, logout, submitAbsen, openCheckOut, confirmCheckOut,
       getUserName, getMonthlyStats, openAddUser, openEditUser, saveUser, deleteUser,
       openEditAttendance, saveAttendance,
-      statusLabel, statusColor, getDayName, getArrivalCategory
+      statusLabel, statusColor, getDayName, getArrivalCategory, exportCSV
     };
   }
 }).mount('#app');
