@@ -71,6 +71,7 @@ createApp({
     const geoMessage = ref('');
     const showCheckOutModal = ref(false);
     const checkOutTime = ref('');
+    const showTodayAttendance = ref(false); // toggle: buka/tutup daftar "Sudah Absen Hari Ini"
     let timer = null;
 
     // ----- LOAD DATA DARI SUPABASE -----
@@ -747,7 +748,7 @@ return           { key: 'terlambat_berat',  label: 'Terlambat Berat',  color: '#
       userForm, attForm, formError, reportFilter, historyMonth, absenForm,
       months, today, todayFormatted, greeting,
       employeeUsers, todayAttendanceList, todayMyAttendance, canCheckOut, hasUnfinishedCheckout, unfinishedAttendance,
-      showCheckOutModal, checkOutTime,
+      showCheckOutModal, checkOutTime, showTodayAttendance,
       todayStats, filteredReport, reportSummary, myHistory, myMonthStats,
       geoStatus, geoMessage,
       login, logout, submitAbsen, openCheckOut, confirmCheckOut,
